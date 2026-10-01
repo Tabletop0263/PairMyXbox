@@ -100,7 +100,7 @@ class MainActivity : Activity() {
         val title = TextView(this).apply { text = "PadBridge"; textSize = 24f }
         ipBox = EditText(this).apply {
             hint = "Wii IP (shown on Wii screen)"
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            keyListener = android.text.method.DigitsKeyListener.getInstance("0123456789.")
             setText(getPreferences(MODE_PRIVATE).getString("ip", ""))
         }
         toggle = Button(this).apply {
