@@ -2,6 +2,8 @@ package dev.padbridge
 
 import android.app.Activity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -59,19 +61,43 @@ class MainActivity : Activity() {
     @Volatile private var lt = 0f
     @Volatile private var rt = 0f
     @Volatile private var running = false
+    @Volatile private var status = "idle"
 
     private lateinit var ipBox: EditText
     private lateinit var toggle: Button
     private lateinit var info: TextView
+    private val ui = Handler(Looper.getMainLooper())
+
+    private val tick = object : Runnable {
+        override fun run() {
+            val pads = InputDevice.getDeviceIds()
+                .mapNotNull { InputDevice.getDevice(it) }
+                .filter {
+                    (it.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+                        (it.sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                }
+                .joinToString { it.name }
+            info.text = String.format(
+                "%s\npads: %s\nbtn=%04X\nL %6d %6d\nR %6d %6d\nLT %3d  RT %3d",
+                status, pads.ifEmpty { "none" }, keyBits or hatBits,
+                s16(lx).toInt(), s16(ly).toInt(), s16(rx).toInt(), s16(ry).toInt(),
+                u8(lt).toInt() and 0xFF, u8(rt).toInt() and 0xFF
+            )
+            ui.postDelayed(this, 100)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val p = (16 * resources.displayMetrics.density).toInt()
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(p, p * 3, p, p)
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.setOnApplyWindowInsetsListener { v, ins ->
+            @Suppress("DEPRECATION")
+            v.setPadding(p, ins.systemWindowInsetTop + p, p, ins.systemWindowInsetBottom + p)
+            ins
         }
+        val title = TextView(this).apply { text = "PadBridge"; textSize = 24f }
         ipBox = EditText(this).apply {
             hint = "Wii IP (shown on Wii screen)"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
@@ -82,13 +108,27 @@ class MainActivity : Activity() {
             setOnClickListener { if (running) running = false else start() }
         }
         info = TextView(this).apply {
-            text = "Connect the Xbox controller to the phone first,\nthen keep this screen open."
             typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 16f
         }
+        root.addView(title)
         root.addView(ipBox)
         root.addView(toggle)
         root.addView(info)
         setContentView(root)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ui.post(tick)
+    }
+
+    override fun onPause() {
+        ui.removeCallbacks(tick)
+        // input stops arriving in background: clear state so nothing stays "held" on the Wii
+        keyBits = 0; hatBits = 0
+        lx = 0f; ly = 0f; rx = 0f; ry = 0f; lt = 0f; rt = 0f
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -102,9 +142,10 @@ class MainActivity : Activity() {
 
     private fun start() {
         val host = ipBox.text.toString().trim()
-        if (host.isEmpty()) return
+        if (host.isEmpty()) { status = "enter the Wii IP"; return }
         getPreferences(MODE_PRIVATE).edit().putString("ip", host).apply()
         running = true
+        status = "sending -> $host:$PORT"
         toggle.text = "Stop"
         thread(isDaemon = true) {
             try {
@@ -113,29 +154,19 @@ class MainActivity : Activity() {
                     val buf = ByteArray(14)
                     val bb = ByteBuffer.wrap(buf).order(ByteOrder.BIG_ENDIAN)
                     val pkt = DatagramPacket(buf, buf.size, addr, PORT)
-                    var n = 0
                     while (running) {
-                        val btn = keyBits or hatBits
                         bb.clear()
-                        bb.putInt(btn)
+                        bb.putInt(keyBits or hatBits)
                         bb.putShort(s16(lx)); bb.putShort(s16(ly))
                         bb.putShort(s16(rx)); bb.putShort(s16(ry))
                         bb.put(u8(lt)); bb.put(u8(rt))
                         sock.send(pkt)
-                        if (++n % 15 == 0) {
-                            val t = String.format(
-                                "-> %s:%d\nbtn=%04X\nL %5d %5d\nR %5d %5d\nLT %3d  RT %3d",
-                                host, PORT, btn,
-                                s16(lx).toInt(), s16(ly).toInt(), s16(rx).toInt(), s16(ry).toInt(),
-                                u8(lt).toInt() and 0xFF, u8(rt).toInt() and 0xFF
-                            )
-                            runOnUiThread { info.text = t }
-                        }
                         Thread.sleep(SEND_MS)
                     }
                 }
+                status = "stopped"
             } catch (e: Exception) {
-                runOnUiThread { info.text = "error: ${e.message}" }
+                status = "error: ${e.message}"
             } finally {
                 running = false
                 runOnUiThread { toggle.text = "Start" }
