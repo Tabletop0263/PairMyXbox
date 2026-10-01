@@ -70,7 +70,7 @@ class MainActivity : Activity() {
 
     private val tick = object : Runnable {
         override fun run() {
-            val pads = InputDevice.getDeviceIds()
+            val pads = InputDevice.getDeviceIds().toList()
                 .mapNotNull { InputDevice.getDevice(it) }
                 .filter {
                     (it.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
