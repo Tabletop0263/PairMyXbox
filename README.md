@@ -1,4 +1,4 @@
-# PadBridge
+# PairMyXbox
 Xbox BLE controller -> Android phone -> UDP -> Wii (libogc)
 
 1. Push to GitHub; Actions builds `padbridge-apk` and `netpad-wii`.
