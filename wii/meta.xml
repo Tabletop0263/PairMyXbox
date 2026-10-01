@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+  <name>NetPad</name>
+  <coder>Phorosix</coder>
+  <version>1.0</version>
+  <short_description>UDP gamepad receiver (PadBridge)</short_description>
+  <long_description>Receives controller state from the PadBridge Android app over Wi-Fi on UDP port 7777.</long_description>
+</app>
