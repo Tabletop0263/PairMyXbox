@@ -1,4 +1,5 @@
 #include <gccore.h>
+#include <ogc/lwp_watchdog.h>
 #include <wiiuse/wpad.h>
 #include <stdio.h>
 #include <string.h>
